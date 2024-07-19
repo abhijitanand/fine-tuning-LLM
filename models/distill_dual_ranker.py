@@ -8,7 +8,21 @@ import torch.nn.functional as F
 
 # Custom Dataset Class
 class DualEncoderDataset(torch.utils.data.Dataset):
+    """
+    Custom dataset class for dual encoder model.
+    """
+
     def __init__(self, tokenizer, queries, documents, labels, max_length):
+        """
+        Initialize the DualEncoderDataset.
+
+        Args:
+            tokenizer (AutoTokenizer): Tokenizer for tokenizing the input.
+            queries (list): List of query strings.
+            documents (list): List of document strings.
+            labels (list): List of relevance labels.
+            max_length (int): Maximum input length.
+        """
         self.tokenizer = tokenizer
         self.queries = queries
         self.documents = documents
@@ -16,9 +30,24 @@ class DualEncoderDataset(torch.utils.data.Dataset):
         self.max_length = max_length
 
     def __len__(self):
+        """
+        Get the length of the dataset.
+
+        Returns:
+            int: Length of the dataset.
+        """
         return len(self.queries)
 
     def __getitem__(self, index):
+        """
+        Get an item from the dataset.
+
+        Args:
+            index (int): Index of the item.
+
+        Returns:
+            dict: Dictionary containing query inputs, document inputs, and labels.
+        """
         query = self.queries[index]
         document = self.documents[index]
         label = self.labels[index]
@@ -33,12 +62,32 @@ class DualEncoderDataset(torch.utils.data.Dataset):
 
 # Dual Encoder Model
 class DualEncoderModel(torch.nn.Module):
+    """
+    Dual encoder model for ranking documents based on queries.
+    """
+
     def __init__(self, model_name):
+        """
+        Initialize the DualEncoderModel.
+
+        Args:
+            model_name (str): Name or path of the pre-trained model.
+        """
         super(DualEncoderModel, self).__init__()
         self.query_encoder = AutoModel.from_pretrained(model_name)
         self.doc_encoder = AutoModel.from_pretrained(model_name)
 
     def forward(self, query_inputs, doc_inputs):
+        """
+        Forward pass of the model.
+
+        Args:
+            query_inputs (dict): Dictionary containing query inputs.
+            doc_inputs (dict): Dictionary containing document inputs.
+
+        Returns:
+            torch.Tensor: Scores representing the similarity between queries and documents.
+        """
         if isinstance(self.query_encoder, DistilBertModel) or isinstance(self.doc_encoder, DistilBertModel):
             query_inputs.pop('token_type_ids', None)
             doc_inputs.pop('token_type_ids', None)
@@ -57,6 +106,22 @@ class DualEncoderModel(torch.nn.Module):
 
 # Training Function
 def train(model, teacher_model, tokenizer, train_dataset, val_dataset, epochs, batch_size, learning_rate, max_length, alpha, temperature):
+    """
+    Train the dual encoder model using distillation.
+
+    Args:
+        model (DualEncoderModel): Student model to be trained.
+        teacher_model (DualEncoderModel): Teacher model for distillation.
+        tokenizer (AutoTokenizer): Tokenizer for tokenizing the input.
+        train_dataset (DualEncoderDataset): Training dataset.
+        val_dataset (DualEncoderDataset): Validation dataset.
+        epochs (int): Number of training epochs.
+        batch_size (int): Training batch size.
+        learning_rate (float): Learning rate.
+        max_length (int): Maximum input length.
+        alpha (float): Weighting factor for the ranking loss vs. distillation loss.
+        temperature (float): Temperature for distillation.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     teacher_model.to(device)
@@ -111,6 +176,15 @@ def train(model, teacher_model, tokenizer, train_dataset, val_dataset, epochs, b
         evaluate(model, val_loader, device, loss_fn)
 
 def evaluate(model, val_loader, device, loss_fn):
+    """
+    Evaluate the dual encoder model on the validation set.
+
+    Args:
+        model (DualEncoderModel): Model to be evaluated.
+        val_loader (DataLoader): Validation data loader.
+        device (torch.device): Device to run the evaluation on.
+        loss_fn (torch.nn.Module): Loss function for calculating the loss.
+    """
     model.eval()
     total_loss = 0
 
@@ -132,6 +206,12 @@ def evaluate(model, val_loader, device, loss_fn):
     print(f'Validation Loss: {avg_val_loss:.4f}')
 
 def load_msmarco_data():
+    """
+    Load the MS MARCO dataset.
+
+    Returns:
+        tuple: Tuple containing queries, documents, and labels.
+    """
     dataset = ir_datasets.load("msmarco-passage/train")
     queries = dataset.queries_iter()
     docs = dataset.docs_iter()

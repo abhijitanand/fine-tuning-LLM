@@ -8,17 +8,51 @@ import ir_datasets
 
 # Custom Dataset Class
 class DocumentRankingDataset(torch.utils.data.Dataset):
+    
     def __init__(self, tokenizer, queries, documents, labels, max_length):
-        self.tokenizer = tokenizer
-        self.queries = queries
-        self.documents = documents
-        self.labels = labels
-        self.max_length = max_length
+            """
+            Initializes the BERTRanking model.
+
+            Args:
+                tokenizer (Tokenizer): The tokenizer used to tokenize the input data.
+                queries (list): A list of query strings.
+                documents (list): A list of document strings.
+                labels (list): A list of label values.
+                max_length (int): The maximum length of the input sequences.
+
+            Returns:
+                None
+            """
+            self.tokenizer = tokenizer
+            self.queries = queries
+            self.documents = documents
+            self.labels = labels
+            self.max_length = max_length
 
     def __len__(self):
-        return len(self.queries)
+            """
+            Returns the length of the queries list.
+
+            Returns:
+                int: The length of the queries list.
+            """
+            return len(self.queries)
 
     def __getitem__(self, index):
+        """
+        Retrieves the item at the given index from the dataset.
+
+        Args:
+            index (int): The index of the item to retrieve.
+
+        Returns:
+            dict: A dictionary containing the inputs and labels for the item.
+                The dictionary has the following keys:
+                - 'input_ids': A tensor containing the input token IDs.
+                - 'attention_mask': A tensor containing the attention mask.
+                - 'token_type_ids': A tensor containing the token type IDs.
+                - 'labels': A tensor containing the labels for the item.
+        """
         query = self.queries[index]
         document = self.documents[index]
         label = self.labels[index]
@@ -29,6 +63,23 @@ class DocumentRankingDataset(torch.utils.data.Dataset):
 
 # Training Function
 def train(model, tokenizer, train_dataset, val_dataset, epochs, batch_size, learning_rate, max_length):
+    """
+    Trains the given model using the provided training dataset.
+
+    Args:
+        model (torch.nn.Module): The model to be trained.
+        tokenizer: The tokenizer used to preprocess the input data.
+        train_dataset: The training dataset.
+        val_dataset: The validation dataset.
+        epochs (int): The number of training epochs.
+        batch_size (int): The batch size for training.
+        learning_rate (float): The learning rate for the optimizer.
+        max_length (int): The maximum length of input sequences.
+
+    Returns:
+        None
+    """
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -64,6 +115,18 @@ def train(model, tokenizer, train_dataset, val_dataset, epochs, batch_size, lear
         evaluate(model, val_loader, device)
 
 def evaluate(model, val_loader, device):
+    """
+    Evaluate the model on the validation set.
+
+    Args:
+        model (torch.nn.Module): The model to be evaluated.
+        val_loader (torch.utils.data.DataLoader): The data loader for the validation set.
+        device (torch.device): The device to run the evaluation on.
+
+    Returns:
+        float: The average validation loss.
+    """
+    
     model.eval()
     total_loss = 0
 
@@ -78,8 +141,17 @@ def evaluate(model, val_loader, device):
 
     avg_val_loss = total_loss / len(val_loader)
     print(f'Validation Loss: {avg_val_loss:.4f}')
+    return avg_val_loss
 
 def load_msmarco_data():
+    """
+    Loads the MSMARCO dataset and returns the queries, documents, and labels.
+
+    Returns:
+        queries (list): A list of strings representing the queries.
+        documents (list): A list of strings representing the documents.
+        labels (list): A list of integers representing the relevance labels.
+    """
     dataset = ir_datasets.load("msmarco-passage/train")
     queries = dataset.queries_iter()
     docs = dataset.docs_iter()

@@ -10,6 +10,17 @@ import numpy as np
 
 class RankingDataset(torch.utils.data.Dataset):
     def __init__(self, tokenizer, queries, documents, qids, docids, max_length):
+        """
+        Initialize the RankingDataset class.
+
+        Args:
+            tokenizer (transformers.PreTrainedTokenizer): The tokenizer to be used.
+            queries (list): List of query texts.
+            documents (list): List of document texts.
+            qids (list): List of query IDs.
+            docids (list): List of document IDs.
+            max_length (int): Maximum input length.
+        """
         self.tokenizer = tokenizer
         self.queries = queries
         self.documents = documents
@@ -18,9 +29,24 @@ class RankingDataset(torch.utils.data.Dataset):
         self.max_length = max_length
 
     def __len__(self):
+        """
+        Get the length of the dataset.
+
+        Returns:
+            int: Length of the dataset.
+        """
         return len(self.queries)
 
     def __getitem__(self, index):
+        """
+        Get an item from the dataset.
+
+        Args:
+            index (int): Index of the item.
+
+        Returns:
+            dict: Dictionary containing the inputs, query ID, and document ID.
+        """
         query = self.queries[index]
         document = self.documents[index]
         qid = self.qids[index]
@@ -32,6 +58,15 @@ class RankingDataset(torch.utils.data.Dataset):
         return {'inputs': inputs, 'qid': qid, 'docid': docid}
 
 def evaluate(model, dataloader, device, output_path):
+    """
+    Evaluate the model on the given dataloader and save the results to the output path.
+
+    Args:
+        model (torch.nn.Module): The model to be evaluated.
+        dataloader (torch.utils.data.DataLoader): The dataloader for evaluation.
+        device (torch.device): The device to be used for evaluation.
+        output_path (str): The path to save the evaluation results.
+    """
     model.eval()
     results = []
 
@@ -52,6 +87,15 @@ def evaluate(model, dataloader, device, output_path):
             f.write(result + '\n')
 
 def parse_trec_eval_output(output):
+    """
+    Parse the output of trec_eval and extract the evaluation metrics.
+
+    Args:
+        output (str): The output of trec_eval.
+
+    Returns:
+        tuple: Tuple containing the MAP score, NDCG@10 score, and reciprocal rank.
+    """
     map_score, ndcg_10, rr = None, None, None
     for line in output.split('\n'):
         if "map" in line and "all" in line:
@@ -63,6 +107,15 @@ def parse_trec_eval_output(output):
     return map_score, ndcg_10, rr
 
 def run_trec_eval(qrels_path, results_path, model_name, output_file):
+    """
+    Run trec_eval to evaluate the results.
+
+    Args:
+        qrels_path (str): The path to the qrels file.
+        results_path (str): The path to the results file.
+        model_name (str): The name of the model.
+        output_file (str): The path to save the evaluation metrics.
+    """
     command = f"./trec_eval -m ndcg_cut.10 -m map -m recip_rank {qrels_path} {results_path}"
     output = subprocess.getoutput(command)
     print(output)
@@ -70,11 +123,18 @@ def run_trec_eval(qrels_path, results_path, model_name, output_file):
     map_score, ndcg_10, rr = parse_trec_eval_output(output)
     
     with open(output_file, 'a') as f:
-        #f.write(f"{model_name}\t{map_score:.4f}\t{ndcg_10:.4f}\t{rr:.4f}\n")
-        print(model_name + "\t" + round(float(map_score),4) + "\t" + round(float(ndcg_10),4) + "\t" + round(float(rr),4) + "\n")
-        f.write(model_name + "\t" + round(float(map_score),4) + "\t" + round(float(ndcg_10),4) + "\t" + round(float(rr),4) + "\n")
+        f.write(f"{model_name}\t{map_score:.4f}\t{ndcg_10:.4f}\t{rr:.4f}\n")
 
 def load_trecdl_data(year):
+    """
+    Load the TREC-DL data for the given year.
+
+    Args:
+        year (str): The year of the TREC-DL test set (19 or 20).
+
+    Returns:
+        tuple: Tuple containing the query texts, document texts, query IDs, and document IDs.
+    """
     if year == "19":
         dataset = ir_datasets.load("msmarco-passage/trec-dl-2019")
     elif year == "20":

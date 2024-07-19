@@ -1,54 +1,68 @@
-# conda env bert_qpp
-from openai import OpenAI
-import pandas as pd
-import time
-from typing import Any, Dict, Tuple, Union
-import timeit
 import argparse
+import time
+import timeit
 from pathlib import Path
+from typing import Any, Dict, Tuple, Union
+import pandas as pd
+from openai import OpenAI
 
-client = OpenAI(api_key = "your api key")
+# Initialize OpenAI client
+openai_client = OpenAI(api_key="your api key")
 pd.options.mode.copy_on_write = True
-class LLMRewriter:
-    def __init__(self, data_file, hparams: Dict[str, Any]) -> None:
-        self.skip_row = hparams["skip_row"]
-        self.model_name = hparams["model_name"]
-        self.temperature = hparams["temperature"]
-        self.top_p = hparams["top_p"]
-        self.max_tokens = hparams["max_tokens"]
-        self.frequency_penalty = hparams["frequency_penalty"]
-        self.presence_penalty = hparams["presence_penalty"]
-        self.final_out_file = hparams["final_out_file"]
-        self.is_chatgpt = hparams["is_chatgpt"]
-        print("Model: {}, data_file: {}, is_ChatGPT: {}".format(self.model_name, data_file, self.is_chatgpt))
-        self.df_final = pd.read_csv(data_file, delimiter="\t", header=None, skiprows=self.skip_row,
-                                    names=["q_id", "doc_id", "query", "doc"])
-        print("number of queries:", self.df_final.q_id.nunique())
 
-    def model_prompts(self, query, doc):        
+class QueryIntentExpander:
+    def __init__(self, data_file: str, hyperparameters: Dict[str, Any]) -> None:
+        """
+        Initializes the QueryIntentExpander with data file and hyperparameters.
+
+        Parameters:
+            data_file (str): Path to the input data file.
+            hyperparameters (Dict[str, Any]): Dictionary containing model and request parameters.
+        """
+        self.skip_rows = hyperparameters["skip_row"]
+        self.model_name = hyperparameters["model_name"]
+        self.temperature = hyperparameters["temperature"]
+        self.top_p = hyperparameters["top_p"]
+        self.max_tokens = hyperparameters["max_tokens"]
+        self.frequency_penalty = hyperparameters["frequency_penalty"]
+        self.presence_penalty = hyperparameters["presence_penalty"]
+        self.output_file = hyperparameters["final_out_file"]
+        self.is_chatgpt = hyperparameters["is_chatgpt"]
+        
+        print(f"Model: {self.model_name}, Data File: {data_file}, Is ChatGPT: {self.is_chatgpt}")
+        
+        # Load data from file
+        self.data_frame = pd.read_csv(data_file, delimiter="\t", header=None, skiprows=self.skip_rows,
+                                     names=["q_id", "doc_id", "query", "doc"])
+        print(f"Number of queries: {self.data_frame.q_id.nunique()}")
+
+    def _generate_model_response(self, query: str, document: str) -> Dict[str, Any]:
+        """
+        Generates a model response for a given query and document based on the selected model.
+
+        Parameters:
+            query (str): The query string.
+            document (str): The document string.
+
+        Returns:
+            Dict[str, Any]: The response from the model.
+        """
         if self.is_chatgpt:
-            response = client.chat.completions.create(
+            response = openai_client.chat.completions.create(
                 model=self.model_name,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 frequency_penalty=self.frequency_penalty,
                 presence_penalty=self.presence_penalty,
                 messages=[
-                    {
-                    "role": "system",
-                    "content": f"You are an intelligent system and your job is to predict the intention behind the user question given a list of documents."
-                    },
-                    
-                    {
-                    "role": "user",
-                    "content": f"A person want to find out distinct intention behind the question {query}. Give five descriptive (max. 15 words) distinct intention which are easy to understand. Consider all documents in your response.Response should be in this format: Intention:: <intention> , Doc_list::<list of documents with the intention>\n\nDocuments: {doc}"
-                    },
+                    {"role": "system", "content": "You are an intelligent system and your job is to predict the intention behind the user question given a list of documents."},
+                    {"role": "user", "content": f"A person wants to find out distinct intentions behind the question {query}. Provide five descriptive (max. 15 words) distinct intentions which are easy to understand. Consider all documents in your response. Response should be in this format: Intention:: <intention>, Doc_list::<list of documents with the intention>\n\nDocuments: {document}"}
                 ]
             )
         else:
-            response = client.chat.completions.create(
+            response = openai_client.chat.completions.create(
                 model=self.model_name,
-                prompt="Being a ranking model your task is to do query expansion. This means given a query and a document expand the query such that it is relevant to the document. Expand and contextualise query as best as you can in one or two short sentences. Please do not ask any questions. Only answer with the expanded query as a question. If you are still unable to then just output UNKNOWN.\nquery:" + query + "\ndocument:" + doc,
+                prompt=f"Being a ranking model, your task is to do query expansion. Given a query and a document, expand the query to be relevant to the document. Expand and contextualize the query in one or two short sentences. Do not ask questions. Only answer with the expanded query. If you cannot expand, just output UNKNOWN.\nQuery: {query}\nDocument: {document}",
                 temperature=self.temperature,
                 top_p=self.top_p,
                 max_tokens=self.max_tokens,
@@ -57,88 +71,102 @@ class LLMRewriter:
             )
         return response
 
-    def chunk(self, seq, size):
-            return (seq[pos:pos + size] for pos in range(0, len(seq), size))
-    
-    def get_gpt3_completions(self):
-            """
-            Retrieves GPT-3 completions for each query in the dataset.
+    def _chunk_sequence(self, sequence: pd.DataFrame, chunk_size: int) -> pd.DataFrame:
+        """
+        Chunks a DataFrame into smaller parts for processing.
 
-            Returns:
-                final_df (pandas.DataFrame): DataFrame containing the query ID, query, and GPT-3 completion for each query.
-            """
-            job_df = {"q_id":[], "doc_id":[], "query":[],"description":[]}
-            i=0
-            n=10
-            index = 0
-            start = timeit.default_timer()
-            qid_list = self.df_final.q_id.unique()
-            
-            for id in qid_list:
-                df = self.df_final[self.df_final['q_id']==id]
-                for df_chunk in self.chunk(df, n):
-                    # merge ids to report
-                    str_doc_ids = ','.join(df_chunk.doc_id)
-                    query_str = df['query'].iloc[0]
+        Parameters:
+            sequence (pd.DataFrame): The DataFrame to be chunked.
+            chunk_size (int): Size of each chunk.
 
-                    # merge doc_id and doc and then merge all n rows.
-                    df_chunk["doc_merge"] = df_chunk["doc_id"] + ":" + df_chunk["doc"]
-                    str_final_doc= '\n'.join(df_chunk.doc_merge)
-                    job_df['query'].append(query_str)
-                    job_df['q_id'].append(id)
-                    job_df['doc_id'].append(str_doc_ids)
+        Returns:
+            pd.DataFrame: Generator yielding chunks of the DataFrame.
+        """
+        for start in range(0, len(sequence), chunk_size):
+            yield sequence[start:start + chunk_size]
 
-                    try:
-                        if index % 20 == 0 and index != 0:
-                            print("************", index)
-                        response = self.model_prompts(query_str,str_final_doc)
+    def process_queries(self) -> pd.DataFrame:
+        """
+        Processes each query in the dataset, retrieves model completions, and saves the results to a file.
 
-                    except Exception as e:
-                        print("Error is:", e)
-                        time.sleep(60)
-                        response = self.model_prompts(query_str,str_final_doc)
-                    if self.is_chatgpt:
-                        llm_response = response.choices[0].message.content.strip().replace('\n', '').replace('\t', '')
-                    else:
-                        llm_response = response['choices'][0]['text'].strip()
-                    print("q_id:{}, query:{}, Response:{}".format(id, query_str, llm_response))
-
-                    job_df["description"].append(llm_response)
-                    final_df = pd.DataFrame(job_df)
-                    final_df.to_csv(self.final_out_file, sep="\t", index=False)
-
-                    if i%10000 == 0:
-                        print("Queries completed:{}".format(i))
-                    if i%100 == 0:
-                        print('Time for {} request: {}'.format(i,timeit.default_timer() - start))  
-                    i+=1
-                    index +=10
-            return final_df
+        Returns:
+            pd.DataFrame: DataFrame containing query ID, query, and model response for each query.
+        """
+        result_data = {"q_id": [], "doc_id": [], "query": [], "description": []}
+        index = 0
+        chunk_size = 10
+        start_time = timeit.default_timer()
+        query_ids = self.data_frame.q_id.unique()
+        
+        for query_id in query_ids:
+            subset_df = self.data_frame[self.data_frame['q_id'] == query_id]
+            for chunk in self._chunk_sequence(subset_df, chunk_size):
+                document_ids = ','.join(chunk.doc_id)
+                query_text = subset_df['query'].iloc[0]
+                merged_docs = '\n'.join(chunk["doc_id"] + ":" + chunk["doc"])
+                
+                result_data['query'].append(query_text)
+                result_data['q_id'].append(query_id)
+                result_data['doc_id'].append(document_ids)
+                
+                try:
+                    if index % 20 == 0 and index != 0:
+                        print(f"Processing chunk {index}")
+                    response = self._generate_model_response(query_text, merged_docs)
+                except Exception as e:
+                    print(f"Error occurred: {e}")
+                    time.sleep(60)
+                    response = self._generate_model_response(query_text, merged_docs)
+                
+                if self.is_chatgpt:
+                    model_response = response.choices[0].message.content.strip().replace('\n', '').replace('\t', '')
+                else:
+                    model_response = response['choices'][0]['text'].strip()
+                
+                print(f"Query ID: {query_id}, Query: {query_text}, Response: {model_response}")
+                result_data["description"].append(model_response)
+                
+                # Save results incrementally to avoid data loss
+                pd.DataFrame(result_data).to_csv(self.output_file, sep="\t", index=False)
+                
+                if index % 10000 == 0:
+                    print(f"Queries completed: {index}")
+                if index % 100 == 0:
+                    print(f'Time for {index} requests: {timeit.default_timer() - start_time}')  
+                
+                index += chunk_size
+        
+        return pd.DataFrame(result_data)
 
 def main() -> None:
-    ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    ap.add_argument('DATA_DIR', help='Folder with all preprocessed files')
-    ap.add_argument('--data_file', type=str, default="pass_all_train_query_car_12k.tsv", help='dataset file name')
-    ap.add_argument('--model_name', type=str, default="text-davinci-003", help='llm model name')
-    ap.add_argument('--final_out_file', type=str, default="pass_rewrite_query_davinci_car_12k.tsv", help='out file_name')
-    ap.add_argument('--temperature', type=float, default=0.6)
-    ap.add_argument('--top_p', type=float, default=1.0)
-    ap.add_argument('--frequency_penalty', type=float, default=0.0)
-    ap.add_argument('--presence_penalty', type=float, default=0.0)
-    ap.add_argument('--max_tokens', type=int, default=512)
-    ap.add_argument('--skip_row', type=int, default=0)
-    ap.add_argument('--is_chatgpt', action='store_true', help='if model is chatgpt')
-    ap.add_argument('--only_query', action='store_true', help='if generating only from query')
-    ap.add_argument('--if_groundtruth', action='store_true', help='for groundtruth generation')
-    args = ap.parse_args()
-
-    data_dir = Path(args.DATA_DIR)
-    data_file = data_dir / args.data_file
-
-    print("Final out file:{}".format(args.final_out_file))
-    llm_rewriter = LLMRewriter(data_file,vars(args))
-    df = llm_rewriter.get_gpt3_completions()
-    print('Number of Generations:{}'.format(len(df)))
+    """
+    Main function to parse arguments, initialize the QueryIntentExpander, and process the queries.
+    """
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('DATA_DIR', help='Folder with all preprocessed files')
+    parser.add_argument('--data_file', type=str, default="pass_all_train_query_car_12k.tsv", help='Dataset file name')
+    parser.add_argument('--model_name', type=str, default="text-davinci-003", help='LLM model name')
+    parser.add_argument('--final_out_file', type=str, default="pass_rewrite_query_davinci_car_12k.tsv", help='Output file name')
+    parser.add_argument('--temperature', type=float, default=0.6, help='Sampling temperature')
+    parser.add_argument('--top_p', type=float, default=1.0, help='Top-p (nucleus sampling) probability')
+    parser.add_argument('--frequency_penalty', type=float, default=0.0, help='Frequency penalty')
+    parser.add_argument('--presence_penalty', type=float, default=0.0, help='Presence penalty')
+    parser.add_argument('--max_tokens', type=int, default=512, help='Maximum tokens in response')
+    parser.add_argument('--skip_row', type=int, default=0, help='Number of rows to skip in the input file')
+    parser.add_argument('--is_chatgpt', action='store_true', help='Flag to use ChatGPT model')
+    parser.add_argument('--only_query', action='store_true', help='Flag to generate only from query')
+    parser.add_argument('--if_groundtruth', action='store_true', help='Flag for groundtruth generation')
+    
+    args = parser.parse_args()
+    data_directory = Path(args.DATA_DIR)
+    data_file_path = data_directory / args.data_file
+    
+    print(f"Final output file: {args.final_out_file}")
+    
+    expander = QueryIntentExpander(data_file_path, vars(args))
+    results_df = expander.process_queries()
+    
+    print(f'Number of Generations: {len(results_df)}')
 
 if __name__ == '__main__':
     main()

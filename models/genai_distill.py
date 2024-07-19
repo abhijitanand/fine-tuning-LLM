@@ -7,6 +7,19 @@ from tqdm import tqdm
 
 # Custom Dataset Class
 class CustomDataset(Dataset):
+    """
+    A custom PyTorch dataset for processing texts using a tokenizer.
+
+    Args:
+        texts (list): A list of texts to be processed.
+        tokenizer (Tokenizer): The tokenizer object to use for encoding the texts.
+        max_length (int): The maximum length of the encoded sequences.
+
+    Attributes:
+        data (list): A list of tuples containing the encoded input_ids and attention_mask.
+
+    """
+
     def __init__(self, texts, tokenizer, max_length):
         self.data = []
         tokenizer.pad_token = tokenizer.eos_token
@@ -16,9 +29,26 @@ class CustomDataset(Dataset):
                 self.data.append((encoding.input_ids, encoding.attention_mask))
         
     def __len__(self):
+        """
+        Returns the total number of samples in the dataset.
+
+        Returns:
+            int: The length of the dataset.
+
+        """
         return len(self.data)
 
     def __getitem__(self, index):
+        """
+        Returns the sample at the given index.
+
+        Args:
+            index (int): The index of the sample to retrieve.
+
+        Returns:
+            dict: A dictionary containing the input_ids and attention_mask tensors.
+
+        """
         return {
             'input_ids': torch.tensor(self.data[index][0]),
             'attention_mask': torch.tensor(self.data[index][1])
@@ -26,6 +56,24 @@ class CustomDataset(Dataset):
 
 # Distillation Training Function
 def distill(teacher_model, student_model, tokenizer, train_dataset, epochs, batch_size, learning_rate, max_length, temperature):
+    """
+    Distills knowledge from a teacher model to a student model using the distillation technique.
+
+    Args:
+        teacher_model (torch.nn.Module): The teacher model to distill knowledge from.
+        student_model (torch.nn.Module): The student model to distill knowledge into.
+        tokenizer: The tokenizer used for tokenizing the input data.
+        train_dataset: The dataset used for training the student model.
+        epochs (int): The number of training epochs.
+        batch_size (int): The batch size for training.
+        learning_rate (float): The learning rate for the optimizer.
+        max_length (int): The maximum length of the input sequences.
+        temperature (float): The temperature parameter for distillation.
+
+    Returns:
+        torch.nn.Module: The trained student model.
+    """
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     teacher_model.to(device)
     student_model.to(device)
@@ -69,6 +117,18 @@ def distill(teacher_model, student_model, tokenizer, train_dataset, epochs, batc
 
 # Distillation Loss Function
 def distillation_loss(student_logits, teacher_logits, temperature):
+    """
+    Calculates the distillation loss between the student and teacher logits.
+
+    Args:
+        student_logits (torch.Tensor): The logits predicted by the student model.
+        teacher_logits (torch.Tensor): The logits predicted by the teacher model.
+        temperature (float): The temperature parameter for scaling the logits.
+
+    Returns:
+        torch.Tensor: The distillation loss.
+
+    """
     loss_fn = torch.nn.KLDivLoss(reduction='batchmean')
     student_probs = torch.nn.functional.log_softmax(student_logits / temperature, dim=-1)
     teacher_probs = torch.nn.functional.softmax(teacher_logits / temperature, dim=-1)
@@ -77,6 +137,19 @@ def distillation_loss(student_logits, teacher_logits, temperature):
 
 # Inference Function
 def generate_text(model, tokenizer, prompt, max_length):
+    """
+    Generates text using a given model and tokenizer.
+
+    Args:
+        model (torch.nn.Module): The pre-trained model used for text generation.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer used to encode the input prompt.
+        prompt (str): The input prompt for text generation.
+        max_length (int): The maximum length of the generated text.
+
+    Returns:
+        str: The generated text.
+
+    """
     model.eval()
     device = next(model.parameters()).device  # Get the device of the model
     input_ids = tokenizer.encode(prompt, return_tensors='pt').to(device)
