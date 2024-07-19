@@ -11,7 +11,7 @@ This repository contains code examples demonstrating different methods for fine-
 
 4. ***Distilled Dual Encoder Model*** : Distill a dual encoder teacher model (BERT) to dual encoder student model(DistillBERT) for document ranking. [Code Link](./models/distil_dual_ranker.py).
 
-5. ***Curriculum Learning*** : Fine-Tuning a BERT model for ranking using **Curriculum Learning** approach. This implementation focuses on difficulty and pacing as described in the [paper](https://arxiv.org/pdf/1912.08555). [Code Link](./models/ranking_curriculum_learning.py)
+5. ***Curriculum Learning*** : Fine-Tuning a BERT model for ranking using **Curriculum Learning** approach. This implementation focuses on difficulty and pacing as described in the [Paper Link](https://arxiv.org/pdf/1912.08555). [Code Link](./models/ranking_curriculum_learning.py)
 
 ## Text Generation using LLM
 1. ***Basic fine-tuning***: Basic example code to fine-tune a small generative model on prompt-response toy data. Ideal for those starting with fine-tuning ***Generative Models***. [Code link](./models/genai_train_prompt_response.py). 
@@ -22,4 +22,4 @@ This repository contains code examples demonstrating different methods for fine-
 
 4. ***RAG Approach***:  Implementing a simple Retrieval-Augmented Generation (RAG) approach where the input is a query and the retrieved relevant documents, with the output being the query intent. [Code Link](./models/genai_opeanai_intent_gen.py)
 
-5. ***RAG for Question Answering***: Implementing a RAG approach for question answering, where we retrieve documents given a query using BM25 that are then used by an LLM to generate answers based on the retrieved context. [Code](./models/rag_question_answer.py)
+5. ***RAG for Question Answering***: Implementing a RAG approach for question answering, where we retrieve documents given a query using BM25 that are then used by an LLM to generate answers based on the retrieved context. [Code Link](./models/rag_question_answer.py)
